@@ -98,7 +98,7 @@ def spectral_cluster(adjacency_matrix=None, graph=None, k=2, normalized=True, cl
     U_norm = U / row_sums[:, np.newaxis]
 
     # Do clustering for U_norm
-    clf = cluster_alg(n_clusters=k, random_state=random_state)
+    clf = cluster_alg(n_clusters=k)
     C_labels = clf.fit_predict(U_norm)
     
     return U_norm, C_labels # Return U_norm for cluster debugging
