@@ -4,9 +4,11 @@ from sklearn.cluster import KMeans
 import numpy as np
 import os
 import random
+import heapq
+from itertools import count
+
 
 ###### Graph loading
-
 def load_graph(graph_file, graph_dir = "./graphs_processed"):
     path = os.path.join(graph_dir, graph_file)
 
@@ -122,9 +124,33 @@ def objective_function(graph_data, labels):
     return res
 
 
-import heapq
-from itertools import count
+##### KMEANS++
+def plus_plus_init(X):
+    # Data shape k x num data
+    num_data = X.shape[0]
+    num_clusters = X.shape[1]
 
+    centers = np.zeros((num_clusters, num_clusters))
+
+    # Choose randomly the first centrer
+    centers[0] = X[np.random.random_integers(0, num_data)]
+    np.random.random_integers(0, num_data)
+
+    for cluster_idx in range(num_clusters - 1):
+
+        # Computes the minimum square norm distances to current centers
+        distances = np.array([np.min([np.linalg.norm(X[x_idx] - centers[i]) ** 2 for i in range(1 + cluster_idx)]) for x_idx in range(num_data)])
+
+        distance_probs = distances / np.linalg.norm(distances)
+        cdf = np.cumsum(distance_probs)
+        r = random.random()
+        next_center_idx = np.where(cdf >= r)[0][0]
+        centers[cluster_idx] = X[next_center_idx]
+
+    return centers
+
+
+##### Balanced KMEANS
 class BalancedKMeans(object):
 
     def __init__(self, n_clusters):
@@ -140,7 +166,7 @@ class BalancedKMeans(object):
         prev_distance = centroid_distances[prev_c_idx]
         cond = centroid_distances[prev_distance < centroid_distances]
         if not(cond.shape[0] > 0):
-            import pdb; pdb.set_trace()
+            raise ValueError('This should not occur.')
 
         assert(cond.shape[0] > 0)
         new_distance = np.min(cond)
@@ -168,10 +194,7 @@ class BalancedKMeans(object):
 
     def fit_predict(self, points, iterations=10000, diff=0.000001):
 
-        # KMean++ should be introduced
-        random_indices = np.random.choice(range(points.shape[0]), size=self.n_clusters)
-        centroids = points[random_indices]
-
+        centroids = plus_plus_init(points)
         size_limit = int(np.ceil(points.shape[0] / self.n_clusters))
         for i in range(iterations): # runs clustering until the number of iterations or the centroid does not change (diff)
             tiebreaker = count() # hacky way to ensure each element in heap is unique.
@@ -193,3 +216,6 @@ class BalancedKMeans(object):
                 break
         labels = self.get_labels(points, clusters)
         return labels
+
+
+
