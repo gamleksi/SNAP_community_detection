@@ -61,10 +61,33 @@ def calculate_normalized_laplacian(A, D):
     N = len(A)
     I = np.eye(N,N)
     L_norm = I - np.dot(np.dot(D_tmp, A), D_tmp)
-
     return L_norm
 
-def spectral_cluster(adjacency_matrix=None, graph=None, k=2, normalized=True, cluster_alg=KMeans, random_state=None):
+def calculate_normalized_random_walk_laplacian(A):
+    # Calculates normalzied laplacian matrix
+    D = calculate_degree_mat(A)
+
+    with np.errstate(divide='ignore'):
+        D_tmp = 1.0 / np.sqrt(D)
+
+    D_tmp[np.isinf(D_tmp)] = 0
+    N = len(A)
+    I = np.eye(N,N)
+    L_norm = I - np.dot(D_tmp, A)
+    return L_norm
+
+def calculate_U_norm(L, k):
+    # Calculate eigenvectors matrix U
+    eig = scipy.sparse.linalg.eigs(L, k)
+
+    assert(np.sum(np.imag(eig[1])) == 0) # Drop imaginary values but assert that imaginary part must be zero
+    U = np.real(eig[1]) # Pick only real values
+    # Normalize U
+    row_sums = U.sum(axis=1)
+    U_norm = U / row_sums[:, np.newaxis]
+    return U_norm
+
+def spectral_cluster(adjacency_matrix=None, graph=None, k=2, normalized=True, cluster_alg=KMeans, random_state=None, graph_data=None):
     # Either input adjacency matrix or networkx graph. Calculations with adjacency matrix is slower.
     assert(adjacency_matrix is not None or graph is not None)
 
@@ -84,23 +107,17 @@ def spectral_cluster(adjacency_matrix=None, graph=None, k=2, normalized=True, cl
 
         if normalized:
             L = calculate_normalized_laplacian(A,D)
-
         else:
             L = D - A
 
-    # Calculate eigenvectors matrix U
-    eig = scipy.sparse.linalg.eigs(L, k)
-
-    assert(np.sum(np.imag(eig[1])) == 0) # Drop imaginary values but assert that imaginary part must be zero
-
-    U = np.real(eig[1]) # Pick only real values
-
-    # Normalize U
-    row_sums = U.sum(axis=1)
-    U_norm = U / row_sums[:, np.newaxis]
+    U_norm = calculate_U_norm(L, k)
 
     # Do clustering for U_norm
-    clf = cluster_alg(n_clusters=k)
+    if graph_data is not None:
+        clf = cluster_alg(k, graph_data)
+    else:
+        clf = cluster_alg(n_clusters=k)
+
     C_labels = clf.fit_predict(U_norm)
 
     return U_norm, C_labels # Return U_norm for cluster debugging
@@ -149,12 +166,13 @@ def plus_plus_init(X):
 
     return centers
 
-
 ##### Balanced KMEANS
 class BalancedKMeans(object):
 
-    def __init__(self, n_clusters):
+    def __init__(self, n_clusters, graph_data, n_init=50):
         self.n_clusters = n_clusters
+        self.graph_data = graph_data
+        self.n_init = n_init
 
     def closest_centroid(self, point, centroids):
         centroid_distances = np.linalg.norm(point - centroids, axis=1)
@@ -194,28 +212,32 @@ class BalancedKMeans(object):
 
     def fit_predict(self, points, iterations=10000, diff=0.000001):
 
-        centroids = plus_plus_init(points)
-        size_limit = int(np.ceil(points.shape[0] / self.n_clusters))
-        for i in range(iterations): # runs clustering until the number of iterations or the centroid does not change (diff)
-            tiebreaker = count() # hacky way to ensure each element in heap is unique.
-            h = self.heapsort(points, centroids, tiebreaker)
-            clusters = [[] for i in range(self.n_clusters)]
-            while(h):
-                distance, centroid_idx, _, value = heapq.heappop(h)
-                if len(clusters[centroid_idx]) < size_limit + 1:
-                    clusters[centroid_idx].append(value)
+        labels = np.zeros((self.n_init, points.shape[0]))
+        results = np.zeros(self.n_init)
+
+        for init_idx in range(self.n_init):
+            centroids = plus_plus_init(points)
+            size_limit = int(np.ceil(points.shape[0] / self.n_clusters))
+            for i in range(iterations): # runs clustering until the number of iterations or the centroid does not change (diff)
+                tiebreaker = count() # hacky way to ensure each element in heap is unique.
+                h = self.heapsort(points, centroids, tiebreaker)
+                clusters = [[] for i in range(self.n_clusters)]
+                while(h):
+                    distance, centroid_idx, _, value = heapq.heappop(h)
+                    if len(clusters[centroid_idx]) < size_limit + 1:
+                        clusters[centroid_idx].append(value)
+                    else:
+                        new_idx, new_distance = self.picK_new_closest_centroid(value, centroids, centroid_idx)
+                        heapq.heappush(h, (new_distance, new_idx, next(tiebreaker), value))
+
+                new_centroids = np.array([self.new_centroid(np.array(c)) for c in clusters])
+                if np.linalg.norm(new_centroids - centroids) ** 2 > diff:
+                    centroids = new_centroids
                 else:
-                    new_idx, new_distance = self.picK_new_closest_centroid(value, centroids, centroid_idx)
-                    heapq.heappush(h, (new_distance, new_idx, next(tiebreaker), value))
+                    break
+            labels[init_idx] = self.get_labels(points, clusters)
+            results[init_idx] = objective_function(self.graph_data, labels[init_idx])
 
-            new_centroids = np.array([self.new_centroid(np.array(c)) for c in clusters])
-            if np.linalg.norm(new_centroids - centroids) ** 2 > diff:
-                centroids = new_centroids
-            else:
-                print("Change less than 0.000001. Episode: ", i)
-                break
-        labels = self.get_labels(points, clusters)
-        return labels
-
-
+        best_idx = np.argmin(results)
+        return labels[best_idx]
 
