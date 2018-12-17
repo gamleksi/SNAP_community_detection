@@ -4,6 +4,7 @@ from sklearn.cluster import KMeans
 import numpy as np
 import os
 import random
+import sklearn
 
 ###### Graph loading
 
@@ -62,20 +63,17 @@ def calculate_normalized_laplacian(A, D):
 
     return L_norm
 
-def spectral_cluster(adjacency_matrix=None, graph=None, k=2, normalized=True, cluster_alg=KMeans, random_state=None):
+def spectral_cluster(adjacency_matrix=None, manual_laplacian=False, k=2, normalized=True, cluster_alg=KMeans, random_state=None):
     # Either input adjacency matrix or networkx graph. Calculations with adjacency matrix is slower.
     assert(adjacency_matrix is not None or graph is not None)
 
     if random_state is None:
         random_state = random.randint(0,10000)
         # Still returns random results since eigenvalues iteration starts from random state...
-
-    if graph is not None:
-        if normalized:
-            L = nx.normalized_laplacian_matrix(graph)
-        else:
-            L = nx.laplacian_matrix(graph)
-
+    
+    if not manual_laplacian:
+        L, dd = scipy.sparse.csgraph.laplacian(adjacency_matrix, normed=normalized,
+                                    return_diag=True)
     else:
         A = adjacency_matrix
         D = calculate_degree_mat(A)
@@ -86,22 +84,38 @@ def spectral_cluster(adjacency_matrix=None, graph=None, k=2, normalized=True, cl
         else:
             L = D - A
 
-    # Calculate eigenvectors matrix U
-    eig = scipy.sparse.linalg.eigs(L, k)
+
+
+    eig = scipy.sparse.linalg.eigs(L, k+1)
+    """
+    laplacian = L
+    laplacian *= -1
+    random_state = sklearn.utils.check_random_state(None)
+    v0 = random_state.uniform(-1, 1, laplacian.shape[0])
+    lambdas, diffusion_map = scipy.sparse.linalg.eigsh(laplacian, k=k,
+                                    sigma=1.0, which='LM',
+                                    tol=0.0, v0=v0)
+    embedding = diffusion_map.T[k::-1]
+    embedding = embedding / dd
+
+    embedding = sklearn.utils.extmath._deterministic_vector_sign_flip(embedding)
+    embedding = embedding[:k].T
+    """
+    
 
     assert(np.sum(np.imag(eig[1])) == 0) # Drop imaginary values but assert that imaginary part must be zero
 
     U = np.real(eig[1]) # Pick only real values
-
+    U = U[:,1:]
     # Normalize U
     row_sums = U.sum(axis=1)
     U_norm = U / row_sums[:, np.newaxis]
 
     # Do clustering for U_norm
-    clf = cluster_alg(n_clusters=k)
+    clf = cluster_alg(n_clusters=k, n_init=100)
     C_labels = clf.fit_predict(U_norm)
 
-    return U_norm, C_labels # Return U_norm for cluster debugging
+    return C_labels # Return U_norm for cluster debugging
 
 
 ##### Objective function specified in project
@@ -127,7 +141,7 @@ from itertools import count
 
 class BalancedKMeans(object):
 
-    def __init__(self, n_clusters):
+    def __init__(self, n_clusters, n_init=None):
         self.n_clusters = n_clusters
 
     def closest_centroid(self, point, centroids):
