@@ -6,7 +6,7 @@ import os
 import random
 import heapq
 from itertools import count
-
+import sklearn
 
 ###### Graph loading
 def load_graph(graph_file, graph_dir = "./graphs_processed"):
@@ -21,6 +21,8 @@ def load_graph(graph_file, graph_dir = "./graphs_processed"):
             components = line_strip.split(' ')
             line_data = (int(components[0]), int(components[1]))
             graph_data.append(line_data)
+
+        f.close()
 
     graph_data = np.asarray(graph_data)
 
@@ -78,29 +80,30 @@ def calculate_normalized_random_walk_laplacian(A):
 
 def calculate_U_norm(L, k):
     # Calculate eigenvectors matrix U
-    eig = scipy.sparse.linalg.eigs(L, k)
+    eig = scipy.sparse.linalg.eigs(L, k + 1)
 
     assert(np.sum(np.imag(eig[1])) == 0) # Drop imaginary values but assert that imaginary part must be zero
     U = np.real(eig[1]) # Pick only real values
+    U = U[:,1:] # TODO is this correct?
     # Normalize U
     row_sums = U.sum(axis=1)
     U_norm = U / row_sums[:, np.newaxis]
     return U_norm
 
-def spectral_cluster(adjacency_matrix=None, graph=None, k=2, normalized=True, cluster_alg=KMeans, random_state=None, graph_data=None):
+
+def spectral_cluster(adjacency_matrix=None, manual_laplacian=False, k=2, normalized=True, cluster_alg=KMeans, random_state=None, graph_data=None):
+
+
     # Either input adjacency matrix or networkx graph. Calculations with adjacency matrix is slower.
-    assert(adjacency_matrix is not None or graph is not None)
+    # assert(adjacency_matrix is not None or graph is not None) TODO old?
 
     if random_state is None:
         random_state = random.randint(0,10000)
         # Still returns random results since eigenvalues iteration starts from random state...
 
-    if graph is not None:
-        if normalized:
-            L = nx.normalized_laplacian_matrix(graph)
-        else:
-            L = nx.laplacian_matrix(graph)
-
+    if not manual_laplacian:
+        L, dd = scipy.sparse.csgraph.laplacian(adjacency_matrix, normed=normalized,
+                                    return_diag=True)
     else:
         A = adjacency_matrix
         D = calculate_degree_mat(A)
@@ -113,14 +116,29 @@ def spectral_cluster(adjacency_matrix=None, graph=None, k=2, normalized=True, cl
     U_norm = calculate_U_norm(L, k)
 
     # Do clustering for U_norm
-    if graph_data is not None:
-        clf = cluster_alg(k, graph_data)
+    if graph_data is None:
+        clf = cluster_alg(n_clusters=k, n_init=100)
     else:
-        clf = cluster_alg(n_clusters=k)
+        clf = cluster_alg(n_clusters=k, n_init=100, graph_data=graph_data)
+
+    """
+    laplacian = L
+    laplacian *= -1
+    random_state = sklearn.utils.check_random_state(None)
+    v0 = random_state.uniform(-1, 1, laplacian.shape[0])
+    lambdas, diffusion_map = scipy.sparse.linalg.eigsh(laplacian, k=k,
+                                    sigma=1.0, which='LM',
+                                    tol=0.0, v0=v0)
+    embedding = diffusion_map.T[k::-1]
+    embedding = embedding / dd
+
+    embedding = sklearn.utils.extmath._deterministic_vector_sign_flip(embedding)
+    embedding = embedding[:k].T
+    """
 
     C_labels = clf.fit_predict(U_norm)
 
-    return U_norm, C_labels # Return U_norm for cluster debugging
+    return C_labels # Return U_norm for cluster debugging
 
 
 ##### Objective function specified in project
@@ -169,10 +187,12 @@ def plus_plus_init(X):
 ##### Balanced KMEANS
 class BalancedKMeans(object):
 
-    def __init__(self, n_clusters, graph_data, n_init=50):
+    def __init__(self, n_clusters, n_init=1, graph_data=None):
+
         self.n_clusters = n_clusters
-        self.graph_data = graph_data
         self.n_init = n_init
+        assert(self.n_init == 1 or self.n_init > 1 and graph_data is not None)
+        self.graph_data = graph_data
 
     def closest_centroid(self, point, centroids):
         centroid_distances = np.linalg.norm(point - centroids, axis=1)
@@ -210,7 +230,7 @@ class BalancedKMeans(object):
                 labels[cond] = i
         return labels
 
-    def fit_predict(self, points, iterations=10000, diff=0.000001):
+    def fit_predict(self, points, iterations=1000, diff=0.001):
 
         labels = np.zeros((self.n_init, points.shape[0]))
         results = np.zeros(self.n_init)
@@ -235,9 +255,14 @@ class BalancedKMeans(object):
                     centroids = new_centroids
                 else:
                     break
-            labels[init_idx] = self.get_labels(points, clusters)
-            results[init_idx] = objective_function(self.graph_data, labels[init_idx])
 
-        best_idx = np.argmin(results)
-        return labels[best_idx]
+            labels[init_idx] = self.get_labels(points, clusters)
+            if self.graph_data is not None:
+                results[init_idx] = objective_function(self.graph_data, labels[init_idx])
+
+        if self.graph_data is not None:
+            best_idx = np.argmin(results)
+            return labels[best_idx]
+        else:
+            return labels[0]
 
