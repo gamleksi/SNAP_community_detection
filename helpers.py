@@ -80,7 +80,7 @@ def calculate_normalized_random_walk_laplacian(A):
 
 def calculate_U_norm(L, k):
     # Calculate eigenvectors matrix U
-    eig = scipy.sparse.linalg.eigs(L, k + 1)
+    eig = scipy.sparse.linalg.eigs(L, k + 1) # TODO onks taa nyt parempi?
 
     assert(np.sum(np.imag(eig[1])) == 0) # Drop imaginary values but assert that imaginary part must be zero
     U = np.real(eig[1]) # Pick only real values
@@ -117,7 +117,7 @@ def spectral_cluster(adjacency_matrix=None, manual_laplacian=False, k=2, normali
 
     # Do clustering for U_norm
     if graph_data is None:
-        clf = cluster_alg(n_clusters=k, n_init=100)
+        clf = cluster_alg(n_clusters=k, n_init=10)
     else:
         clf = cluster_alg(n_clusters=k, n_init=100, graph_data=graph_data)
 

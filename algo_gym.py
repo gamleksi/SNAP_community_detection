@@ -5,6 +5,7 @@ from sklearn.cluster import KMeans
 import helpers
 import itertools
 import csv
+import scipy
 
 def write_result(labels, graph_file, header):
 
@@ -54,10 +55,11 @@ if __name__ == '__main__':
                 (KMeans(n_clusters=k), 'KMeans'),
                 (helpers.BalancedKMeans(k, n_init=10, graph_data=graph_data), 'Balanced Kmeans')]
 
-        L_rw = helpers.calculate_normalized_random_walk_laplacian(adjacency_matrix)
+        # L_rw = helpers.calculate_normalized_random_walk_laplacian(adjacency_matrix)
 
         # Laplacian norm with nx and its U_norm
-        L_norm = nx.normalized_laplacian_matrix(graph)
+        L_norm, _ = scipy.sparse.csgraph.laplacian(adjacency_matrix, normed=True,
+                                    return_diag=True)
         U_norm = helpers.calculate_U_norm(L_norm, k)
 
         representations = [(U_norm, 'U_norm')]
