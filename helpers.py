@@ -90,6 +90,23 @@ def calculate_U_norm(L, k):
     U_norm = U / row_sums[:, np.newaxis]
     return U_norm
 
+def calculate_embedding_representation(L, dd, k):
+
+    laplacian = L
+    laplacian *= -1
+    random_state = sklearn.utils.check_random_state(None)
+    v0 = random_state.uniform(-1, 1, laplacian.shape[0])
+    lambdas, diffusion_map = scipy.sparse.linalg.eigsh(laplacian, k=k,
+                                    sigma=1.0, which='LM',
+                                    tol=0.0, v0=v0)
+    embedding = diffusion_map.T[k::-1]
+    embedding = embedding / dd
+
+    embedding = sklearn.utils.extmath._deterministic_vector_sign_flip(embedding)
+    embedding = embedding[:k].T
+
+    return embedding
+
 
 def spectral_cluster(adjacency_matrix=None, manual_laplacian=False, k=2, normalized=True, cluster_alg=KMeans, random_state=None, graph_data=None):
 
@@ -122,18 +139,7 @@ def spectral_cluster(adjacency_matrix=None, manual_laplacian=False, k=2, normali
         clf = cluster_alg(n_clusters=k, n_init=100, graph_data=graph_data)
 
     """
-    laplacian = L
-    laplacian *= -1
-    random_state = sklearn.utils.check_random_state(None)
-    v0 = random_state.uniform(-1, 1, laplacian.shape[0])
-    lambdas, diffusion_map = scipy.sparse.linalg.eigsh(laplacian, k=k,
-                                    sigma=1.0, which='LM',
-                                    tol=0.0, v0=v0)
-    embedding = diffusion_map.T[k::-1]
-    embedding = embedding / dd
-
-    embedding = sklearn.utils.extmath._deterministic_vector_sign_flip(embedding)
-    embedding = embedding[:k].T
+    embedding = calculate_embedding_representation(L, dd, k)
     """
 
     C_labels = clf.fit_predict(U_norm)

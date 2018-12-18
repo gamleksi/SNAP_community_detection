@@ -30,14 +30,11 @@ def update_loss(loss, algo, representation, graph_file, k):
         writer.writerow(row)
         f.close()
 
-graph_files = ["ca-GrQc.txt"]
-Ks = [2]
+graph_files = [
+        "ca-GrQc.txt", "Oregon-1.txt",
+        "roadNet-CA.txt", "soc-Epinions1.txt", "web-NotreDame.txt" ]
 
-#graph_files = [
-#        "ca-GrQc.txt", "Oregon-1.txt",
-#        "roadNet-CA.txt", "soc-Epinions1.txt", "web-NotreDame.txt" ]
-#
-#Ks = [2, 5, 50, 10, 20]
+Ks = [2, 5, 50, 10, 20]
 
 CSV_LOG_PATH = 'log.csv'
 
@@ -52,24 +49,27 @@ if __name__ == '__main__':
         graph = nx.from_numpy_matrix(adjacency_matrix)
 
         cluster_algos = [
-                (KMeans(n_clusters=k), 'KMeans'),
-                (helpers.BalancedKMeans(k, n_init=10, graph_data=graph_data), 'Balanced Kmeans')]
+                (KMeans(n_clusters=k, n_init=100), 'KMeans'),
+                (helpers.BalancedKMeans(k, n_init=100, graph_data=graph_data), 'Balanced Kmeans')]
 
         # L_rw = helpers.calculate_normalized_random_walk_laplacian(adjacency_matrix)
 
         # Laplacian norm with nx and its U_norm
-        L_norm, _ = scipy.sparse.csgraph.laplacian(adjacency_matrix, normed=True,
+        L_norm, dd = scipy.sparse.csgraph.laplacian(adjacency_matrix, normed=True,
                                     return_diag=True)
         U_norm = helpers.calculate_U_norm(L_norm, k)
 
-        representations = [(U_norm, 'U_norm')]
+        embedding = helpers.calculate_embedding_representation(L_norm, dd, k)
+
+        representations = [(U_norm, 'U_norm'), (embedding, 'embedding')]
         algo_pairs = itertools.product(cluster_algos, representations)
 
         best_loss = np.inf
         best_labels = []
 
+        print("Running: {}".format(graph_file))
+
         for algo, data in algo_pairs:
-            print("Running: {} {} {}".format(graph_file, algo[1], data[1]))
             labels = algo[0].fit_predict(data[0])
             loss = helpers.objective_function(graph_data, labels)
 
