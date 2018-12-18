@@ -36,6 +36,7 @@ graph_files = [
 
 Ks = [2, 5, 50, 10, 20]
 
+
 CSV_LOG_PATH = 'log.csv'
 
 if __name__ == '__main__':
@@ -43,6 +44,7 @@ if __name__ == '__main__':
     assert(len(graph_files) == len(Ks))
 
     for graph_file, k in zip(graph_files, Ks):
+        print("Running {}".format(graph_file))
 
         graph_data, header = helpers.load_graph(graph_file)
         adjacency_matrix = helpers.calculate_adjacency_matrix(graph_data)
@@ -67,7 +69,6 @@ if __name__ == '__main__':
         best_loss = np.inf
         best_labels = []
 
-        print("Running: {}".format(graph_file))
 
         for algo, data in algo_pairs:
             labels = algo[0].fit_predict(data[0])
