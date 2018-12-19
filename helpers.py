@@ -285,8 +285,8 @@ class FastModularity(object):
 
         N = adjacency_matrix.shape[0]
 
-        initial_communities = [[i] for i in range(N)]
-        self.communities = initial_communities # Initially, each vertex is its own community
+        self.initial_communities = [[i] for i in range(N)]
+        self.communities = self.initial_communities # Initially, each vertex is its own community
 
         self.m = 0.5*np.sum(self.adjacency)
         self.degrees = self.adjacency.sum(axis=1)
@@ -321,8 +321,6 @@ class FastModularity(object):
         return delta_Q
 
     def update_delta_Q(self, i, j):
-        current = datetime.datetime.utcnow()
-
         connections_i = np.squeeze(np.asarray((self.adjacency[i,:] == True).todense())) # Get i'th community adjacency
         connections_j = np.squeeze(np.asarray((self.adjacency[j,:] == True).todense())) # Get j'th community adjacency
 
@@ -333,20 +331,18 @@ class FastModularity(object):
 
             # Following from Eq. 10abc from the paper
             if connections_i[k] and connections_i[k]:
-                self.delta_Q[j,k] = self.delta_Q[k,j] = self.delta_Q[i,k] + self.delta_Q[j,k]
+                self.delta_Q[j,k] = self.delta_Q[i,k] + self.delta_Q[j,k]
             elif connections_i[k]:
-                self.delta_Q[j,k] = self.delta_Q[k,j] = self.delta_Q[i,k] - 2*self.a[j]*self.a[k]
+                self.delta_Q[j,k] = self.delta_Q[i,k] - 2*self.a[j]*self.a[k]
             elif connections_j[k]:
-                self.delta_Q[j,k] = self.delta_Q[k,j] = self.delta_Q[j,k] - 2*self.a[i]*self.a[k]
-
-        self.time_in_update.append(datetime.datetime.utcnow() - current)
+                self.delta_Q[j,k] = self.delta_Q[j,k] - 2*self.a[i]*self.a[k]
 
 
     # Postprocess communities to the format used in the project
-    def postprocess_communities(self):
+    def postprocess_communities(self, communities):
         processed = {}
-        for idx in range(len(self.communities)):
-            community = self.communities[idx]
+        for idx in range(len(communities)):
+            community = communities[idx]
             for vert in community:
                 processed[vert] = idx
                 
@@ -404,12 +400,18 @@ class FastModularity(object):
             i = (int)(largest_index / self.adjacency.shape[1])
             j = largest_index % self.adjacency.shape[1]
 
+            if i == j:
+                # Connect some small communities
+                community_sizes = np.asarray([len(c) for c in self.communities])
+                smallest_communities = np.argpartition(community_sizes, 2)
+                i = smallest_communities[0]
+                j = smallest_communities[1]
+
+
             # Update Q
             self.update_delta_Q(i, j)
             # Delete i'th row and col from Q
             to_keep = [idx for idx in range(self.delta_Q.shape[0]) if idx != i] # Indexes which to keep, all but i
-
-            current = datetime.datetime.utcnow()
             
             self.delete_row_lil(self.delta_Q, i)
             self.delete_col_lil(self.delta_Q, i)
@@ -431,14 +433,14 @@ class FastModularity(object):
 
 
             # Merge communities
-            self.communities[j] = list(set(self.communities[i]).union(set(self.communities[j])))
-            self.communities = np.delete(self.communities, i)
+            self.communities[j].extend(self.communities[i]) #= list(set(self.communities[i]).union(set(self.communities[j])))
+            #self.communities = np.delete(self.communities, i)
+            self.communities.pop(i)
 
             num_clusters = len(self.communities)
 
-            self.time_in_matrix.append(datetime.datetime.utcnow() - current)
 
 
-        return self.communities#self.postprocess_communities()
+        return self.postprocess_communities(self.communities)
 
         
