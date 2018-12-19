@@ -48,7 +48,7 @@ if __name__ == '__main__':
 
         graph_data, header = helpers.load_graph(graph_file)
         adjacency_matrix = helpers.calculate_adjacency_matrix(graph_data)
-        graph = nx.from_numpy_matrix(adjacency_matrix)
+        #graph = nx.from_numpy_matrix(adjacency_matrix)
 
         cluster_algos = [
                 (KMeans(n_clusters=k, n_init=100), 'KMeans'),

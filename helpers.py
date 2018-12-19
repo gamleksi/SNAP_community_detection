@@ -34,13 +34,14 @@ def calculate_adjacency_matrix(graph_data):
 
     N = len(vertices)
 
-    adjacency_matrix = np.zeros((N,N))
+    adjacency_matrix = scipy.sparse.lil_matrix((N,N))  #np.zeros((N,N))
 
     for pair in graph_data:
         i = pair[0]
         j = pair[1]
         adjacency_matrix[i,j] = adjacency_matrix[j,i] = 1
 
+    adjacency_matrix = adjacency_matrix.tocsr()
     return adjacency_matrix
 
 
@@ -136,7 +137,7 @@ def spectral_cluster(adjacency_matrix=None, manual_laplacian=False, k=2, normali
     if graph_data is None:
         clf = cluster_alg(n_clusters=k, n_init=10)
     else:
-        clf = cluster_alg(n_clusters=k, n_init=100, graph_data=graph_data)
+        clf = cluster_alg(n_clusters=k, n_init=10, graph_data=graph_data)
 
     """
     embedding = calculate_embedding_representation(L, dd, k)
@@ -174,8 +175,7 @@ def plus_plus_init(X):
     centers = np.zeros((num_clusters, num_clusters))
 
     # Choose randomly the first centrer
-    centers[0] = X[np.random.random_integers(0, num_data)]
-    np.random.random_integers(0, num_data)
+    centers[0] = X[np.random.random_integers(0, num_data-1)]
 
     for cluster_idx in range(num_clusters - 1):
 
