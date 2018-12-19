@@ -309,13 +309,13 @@ class FastModularity(object):
                 continue
 
             val = 0.5*self.m - self.degrees[i]*self.degrees[j]/(2*self.m)**2 # Eq. 8 in the paper
-            delta_Q[i,j] = delta_Q[j,i] = val
+            delta_Q[i,j] = delta_Q[j,i] = val 
 
         return delta_Q
 
     def update_delta_Q(self, i, j):
-        connections_i = np.squeeze(np.asarray((self.adjacency[i,:] == True).todense()))
-        connections_j = np.squeeze(np.asarray((self.adjacency[j,:] == True).todense()))
+        connections_i = np.squeeze(np.asarray((self.adjacency[i,:] == True).todense())) # Get i'th community adjacency
+        connections_j = np.squeeze(np.asarray((self.adjacency[j,:] == True).todense())) # Get j'th community adjacency
 
         # Replace with more efficient implementation
         for k in range(self.adjacency.shape[0]):
@@ -331,22 +331,41 @@ class FastModularity(object):
                 self.delta_Q[j,k] = self.delta_Q[k,j] = self.delta_Q[j,k] - 2*self.a[i]*self.a[k]
 
 
+    # Postprocess communities to the format used in the project
+    def postprocess_communities(self):
+        processed = {}
+        for idx in range(len(self.communities)):
+            community = self.communities[idx]
+            for vert in community:
+                processed[vert] = idx
+                
+        output = []
+        for i in range(len(processed)):
+            output.append(processed[i])
+
+        return output
+
+
     def fit_predict(self, data):
+        # Initial num of clusters. Clusters will be merged until only n_clusters remain.
         num_clusters = len(self.communities)
         while num_clusters > self.n_clusters:
-            crc_Q = self.delta_Q.tocsr()
+            crc_Q = self.delta_Q.tocsr() # Transform to csr format for argmax
             largest_index = crc_Q.argmax()
 
             # i will be merged to j
+            # Argmax returns index, this gets the row and col from it
             i = (int)(largest_index / self.adjacency.shape[1])
             j = largest_index % self.adjacency.shape[1]
 
             # Update Q
             self.update_delta_Q(i, j)
             # Delete i'th row and col from Q
-            to_keep = [idx for idx in range(self.delta_Q.shape[0]) if idx != i]
+            to_keep = [idx for idx in range(self.delta_Q.shape[0]) if idx != i] # Indexes which to keep, all but i
+            
             self.delta_Q = scipy.sparse.lil_matrix(scipy.sparse.csc_matrix(self.delta_Q)[:,to_keep])
             self.delta_Q = scipy.sparse.lil_matrix(scipy.sparse.csr_matrix(self.delta_Q)[to_keep,:])
+
             # Update a
             self.a[j] = self.a[j] + self.a[i]
             self.a = np.delete(self.a, i) # Delete i'th element from a
@@ -370,6 +389,7 @@ class FastModularity(object):
             if num_clusters % 10 == 0:
                 print("Process: {}".format(num_clusters))
 
-        return self.communities
+
+        return self.postprocess_communities()
 
         
