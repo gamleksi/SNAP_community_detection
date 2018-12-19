@@ -47,12 +47,12 @@ if __name__ == '__main__':
         print("Running {}".format(graph_file))
 
         graph_data, header = helpers.load_graph(graph_file)
+        print("Graph data loaded.")
         adjacency_matrix = helpers.calculate_adjacency_matrix(graph_data)
-        #graph = nx.from_numpy_matrix(adjacency_matrix)
 
         cluster_algos = [
-                (KMeans(n_clusters=k, n_init=100), 'KMeans'),
-                (helpers.BalancedKMeans(k, n_init=100, graph_data=graph_data), 'Balanced Kmeans')]
+                (KMeans(n_clusters=k, n_init=10), 'KMeans'),
+                (helpers.BalancedKMeans(k, n_init=10, graph_data=graph_data), 'Balanced Kmeans')]
 
         # L_rw = helpers.calculate_normalized_random_walk_laplacian(adjacency_matrix)
 
