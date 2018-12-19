@@ -45,17 +45,17 @@ def update_loss(loss, algo, representation, graph_file, k):
         writer.writerow(row)
         f.close()
 
-# graph_files = [
-#         "ca-GrQc.txt", "Oregon-1.txt",
-#         "roadNet-CA.txt", "soc-Epinions1.txt", "web-NotreDame.txt" ]
-#
-# Ks = [2, 5, 50, 10, 20]
+ graph_files = [
+         "ca-GrQc.txt", "Oregon-1.txt",
+         "soc-Epinions1.txt", "web-NotreDame.txt" ]
+
+ Ks = [2, 5, 10, 20]
 
 graph_files = ["ca-GrQc.txt"]
 
 Ks = [2]
 
-CSV_LOG_PATH = 'log1.csv'
+CSV_LOG_PATH = 'log.csv'
 
 if __name__ == '__main__':
 
@@ -95,6 +95,7 @@ if __name__ == '__main__':
 
         best_loss = np.inf
         best_labels = []
+        best_algo = " "
 
         for labels, algo_name, data_name in results:
 
@@ -103,9 +104,11 @@ if __name__ == '__main__':
             if (loss < best_loss):
                 best_labels = labels
                 best_loss = loss
+                best_algo = algo_name
             print(algo_name, data_name, loss)
             update_loss(loss, algo_name, data_name, graph_file, k)
 
+        print("Best algo for ", graph_file, best_algo)
         write_result(best_labels, graph_file, header)
 
         results = []
