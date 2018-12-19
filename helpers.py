@@ -19,7 +19,7 @@ def load_graph(graph_file, graph_dir = "./graphs_processed"):
         for line in f:
             line_strip = line.rstrip()
             components = line_strip.split(' ')
-            line_data = (int(components[0]), int(components[1]))
+            line_data = (int(components[0]) - 1, int(components[1]) - 1)
             graph_data.append(line_data)
 
         f.close()
@@ -272,3 +272,104 @@ class BalancedKMeans(object):
         else:
             return labels[0]
 
+
+# https://arxiv.org/pdf/cond-mat/0408187.pdf
+class FastModularity(object):
+    def __init__(self, n_clusters, adjacency_matrix):
+        self.n_clusters = n_clusters
+        self.adjacency = adjacency_matrix
+
+        N = adjacency_matrix.shape[0]
+
+        initial_communities = [[i] for i in range(N)]
+        self.communities = initial_communities # Initially, each vertex is its own community
+
+        self.m = 0.5*np.sum(self.adjacency)
+        self.degrees = self.adjacency.sum(axis=1)
+        self.a = self.degrees / (2*self.m)
+        self.a = np.squeeze(np.asarray(self.a))
+        self.delta_Q = self.initialize_delta_Q()
+
+        print("Initialization complete")
+
+
+
+    def initialize_delta_Q(self):
+        N = self.adjacency.shape[0]
+        delta_Q = scipy.sparse.lil_matrix((N,N))
+        connected_entries = np.nonzero(self.adjacency)
+
+        print("Found {} edges".format(len(connected_entries[0])))
+
+        for idx in range(len(connected_entries[0])):
+            i = connected_entries[0][idx]
+            j = connected_entries[1][idx]
+
+            if i == j:
+                continue
+
+            val = 0.5*self.m - self.degrees[i]*self.degrees[j]/(2*self.m)**2 # Eq. 8 in the paper
+            delta_Q[i,j] = delta_Q[j,i] = val
+
+        return delta_Q
+
+    def update_delta_Q(self, i, j):
+        connections_i = np.squeeze(np.asarray((self.adjacency[i,:] == True).todense()))
+        connections_j = np.squeeze(np.asarray((self.adjacency[j,:] == True).todense()))
+
+        # Replace with more efficient implementation
+        for k in range(self.adjacency.shape[0]):
+            if k == i or k == j:
+                continue
+
+            # Following from Eq. 10abc from the paper
+            if connections_i[k] and connections_i[k]:
+                self.delta_Q[j,k] = self.delta_Q[k,j] = self.delta_Q[i,k] + self.delta_Q[j,k]
+            elif connections_i[k]:
+                self.delta_Q[j,k] = self.delta_Q[k,j] = self.delta_Q[i,k] - 2*self.a[j]*self.a[k]
+            elif connections_j[k]:
+                self.delta_Q[j,k] = self.delta_Q[k,j] = self.delta_Q[j,k] - 2*self.a[i]*self.a[k]
+
+
+    def fit_predict(self, data):
+        num_clusters = len(self.communities)
+        while num_clusters > self.n_clusters:
+            crc_Q = self.delta_Q.tocsr()
+            largest_index = crc_Q.argmax()
+
+            # i will be merged to j
+            i = (int)(largest_index / self.adjacency.shape[1])
+            j = largest_index % self.adjacency.shape[1]
+
+            # Update Q
+            self.update_delta_Q(i, j)
+            # Delete i'th row and col from Q
+            to_keep = [idx for idx in range(self.delta_Q.shape[0]) if idx != i]
+            self.delta_Q = scipy.sparse.lil_matrix(scipy.sparse.csc_matrix(self.delta_Q)[:,to_keep])
+            self.delta_Q = scipy.sparse.lil_matrix(scipy.sparse.csr_matrix(self.delta_Q)[to_keep,:])
+            # Update a
+            self.a[j] = self.a[j] + self.a[i]
+            self.a = np.delete(self.a, i) # Delete i'th element from a
+
+            # Update adjacency matrix to reflect the new community structure
+            j_adjacency = self.adjacency[j,:].astype('bool')
+            i_adjacency = self.adjacency[i,:].astype('bool')
+            total_adjacency = i_adjacency + j_adjacency
+            self.adjacency[j,:] = total_adjacency
+
+            # Delete i'th row and col from adjacency
+            self.adjacency = scipy.sparse.lil_matrix(scipy.sparse.csc_matrix(self.adjacency)[:,to_keep])
+            self.adjacency = scipy.sparse.lil_matrix(scipy.sparse.csr_matrix(self.adjacency)[to_keep,:])
+
+            # Merge communities
+            self.communities[j] = list(set(self.communities[i]).union(set(self.communities[j])))
+            self.communities = np.delete(self.communities, i)
+
+            num_clusters = len(self.communities)
+
+            if num_clusters % 10 == 0:
+                print("Process: {}".format(num_clusters))
+
+        return self.communities
+
+        

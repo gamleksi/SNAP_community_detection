@@ -69,6 +69,8 @@ if __name__ == '__main__':
         best_loss = np.inf
         best_labels = []
 
+        print("Laplacian calculated. Starting clustering...")
+
 
         for algo, data in algo_pairs:
             labels = algo[0].fit_predict(data[0])
