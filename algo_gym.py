@@ -6,6 +6,21 @@ import helpers
 import itertools
 import csv
 import scipy
+import multiprocessing as mp
+
+
+def fit_algo(algo_pair):
+
+    algo = algo_pair[0][0]
+    data = algo_pair[1][0]
+    algo_name = algo_pair[0][1]
+    data_name = algo_pair[1][1]
+
+    print("Running ", algo_name, data_name)
+
+    labels = algo.fit_predict(data)
+
+    return (labels, algo_name, data_name)
 
 def write_result(labels, graph_file, header):
 
@@ -30,14 +45,17 @@ def update_loss(loss, algo, representation, graph_file, k):
         writer.writerow(row)
         f.close()
 
-graph_files = [
-        "ca-GrQc.txt", "Oregon-1.txt",
-        "roadNet-CA.txt", "soc-Epinions1.txt", "web-NotreDame.txt" ]
+# graph_files = [
+#         "ca-GrQc.txt", "Oregon-1.txt",
+#         "roadNet-CA.txt", "soc-Epinions1.txt", "web-NotreDame.txt" ]
+#
+# Ks = [2, 5, 50, 10, 20]
 
-Ks = [2, 5, 50, 10, 20]
+graph_files = ["ca-GrQc.txt"]
 
+Ks = [2]
 
-CSV_LOG_PATH = 'log.csv'
+CSV_LOG_PATH = 'log1.csv'
 
 if __name__ == '__main__':
 
@@ -64,22 +82,30 @@ if __name__ == '__main__':
         embedding = helpers.calculate_embedding_representation(L_norm, dd, k)
 
         representations = [(U_norm, 'U_norm'), (embedding, 'embedding')]
-        algo_pairs = itertools.product(cluster_algos, representations)
+        algo_pairs = list(itertools.product(cluster_algos, representations))
+        algo_pairs.append(((helpers.FastModularity(k, adjacency_matrix), 'Fast Modularity'), (None, "Nothing for fast modularity")))
 
         best_loss = np.inf
         best_labels = []
 
         print("Laplacian calculated. Starting clustering...")
 
+        pool = mp.Pool(len(algo_pairs))
+        results = [pool.apply(fit_algo, args=(algo_pairs[idx],)) for idx in range(len(algo_pairs))]
 
-        for algo, data in algo_pairs:
-            labels = algo[0].fit_predict(data[0])
+        best_loss = np.inf
+        best_labels = []
+
+        for labels, algo_name, data_name in results:
+
             loss = helpers.objective_function(graph_data, labels)
 
             if (loss < best_loss):
                 best_labels = labels
                 best_loss = loss
-            print(algo[1], data[1], loss)
-            update_loss(loss, algo[1], data[1], graph_file, k)
+            print(algo_name, data_name, loss)
+            update_loss(loss, algo_name, data_name, graph_file, k)
 
         write_result(best_labels, graph_file, header)
+
+        results = []
