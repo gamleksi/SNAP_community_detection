@@ -7,6 +7,10 @@ import random
 import heapq
 from itertools import count
 import sklearn
+import datetime
+from bisect import bisect_left
+import tqdm
+
 
 ###### Graph loading
 def load_graph(graph_file, graph_dir = "./graphs_processed"):
@@ -277,7 +281,7 @@ class BalancedKMeans(object):
 class FastModularity(object):
     def __init__(self, n_clusters, adjacency_matrix):
         self.n_clusters = n_clusters
-        self.adjacency = adjacency_matrix
+        self.adjacency = adjacency_matrix.tolil()
 
         N = adjacency_matrix.shape[0]
 
@@ -289,6 +293,9 @@ class FastModularity(object):
         self.a = self.degrees / (2*self.m)
         self.a = np.squeeze(np.asarray(self.a))
         self.delta_Q = self.initialize_delta_Q()
+
+        self.time_in_update = []
+        self.time_in_matrix = []
 
         print("Initialization complete")
 
@@ -314,6 +321,8 @@ class FastModularity(object):
         return delta_Q
 
     def update_delta_Q(self, i, j):
+        current = datetime.datetime.utcnow()
+
         connections_i = np.squeeze(np.asarray((self.adjacency[i,:] == True).todense())) # Get i'th community adjacency
         connections_j = np.squeeze(np.asarray((self.adjacency[j,:] == True).todense())) # Get j'th community adjacency
 
@@ -330,6 +339,8 @@ class FastModularity(object):
             elif connections_j[k]:
                 self.delta_Q[j,k] = self.delta_Q[k,j] = self.delta_Q[j,k] - 2*self.a[i]*self.a[k]
 
+        self.time_in_update.append(datetime.datetime.utcnow() - current)
+
 
     # Postprocess communities to the format used in the project
     def postprocess_communities(self):
@@ -345,11 +356,46 @@ class FastModularity(object):
 
         return output
 
+    def delete_row_lil(self, mat, i):
+        if not isinstance(mat, scipy.sparse.lil_matrix):
+            raise ValueError("works only for LIL format -- use .tolil() first")
+        mat.rows = np.delete(mat.rows, i)
+        mat.data = np.delete(mat.data, i)
+        mat._shape = (mat._shape[0] - 1, mat._shape[1])
+
+
+    def delete_col_lil(self, mat, j):
+        if not isinstance(mat, scipy.sparse.lil_matrix):
+            raise ValueError("works only for LIL format -- use .tolil() first")
+            
+        if j < 0:
+            j += mat.shape[1]
+
+        if j < 0 or j >= mat.shape[1]:
+            raise IndexError('column index out of bounds')
+
+        rows = mat.rows
+        data = mat.data
+        for i in range(mat.shape[0]):
+            pos = bisect_left(rows[i], j)
+            if pos == len(rows[i]):
+                continue
+            elif rows[i][pos] == j:
+                rows[i].pop(pos)
+                data[i].pop(pos)
+                if pos == len(rows[i]):
+                    continue
+            for pos2 in range(pos,len(rows[i])):
+                rows[i][pos2] -= 1
+
+        mat._shape = (mat._shape[0],mat._shape[1]-1)
+
 
     def fit_predict(self, data):
         # Initial num of clusters. Clusters will be merged until only n_clusters remain.
         num_clusters = len(self.communities)
-        while num_clusters > self.n_clusters:
+        steps = num_clusters - self.n_clusters
+        for step in tqdm.tqdm(range(steps)):
             crc_Q = self.delta_Q.tocsr() # Transform to csr format for argmax
             largest_index = crc_Q.argmax()
 
@@ -362,9 +408,12 @@ class FastModularity(object):
             self.update_delta_Q(i, j)
             # Delete i'th row and col from Q
             to_keep = [idx for idx in range(self.delta_Q.shape[0]) if idx != i] # Indexes which to keep, all but i
+
+            current = datetime.datetime.utcnow()
             
-            self.delta_Q = scipy.sparse.lil_matrix(scipy.sparse.csc_matrix(self.delta_Q)[:,to_keep])
-            self.delta_Q = scipy.sparse.lil_matrix(scipy.sparse.csr_matrix(self.delta_Q)[to_keep,:])
+            self.delete_row_lil(self.delta_Q, i)
+            self.delete_col_lil(self.delta_Q, i)
+
 
             # Update a
             self.a[j] = self.a[j] + self.a[i]
@@ -377,8 +426,9 @@ class FastModularity(object):
             self.adjacency[j,:] = total_adjacency
 
             # Delete i'th row and col from adjacency
-            self.adjacency = scipy.sparse.lil_matrix(scipy.sparse.csc_matrix(self.adjacency)[:,to_keep])
-            self.adjacency = scipy.sparse.lil_matrix(scipy.sparse.csr_matrix(self.adjacency)[to_keep,:])
+            self.delete_row_lil(self.adjacency, i)
+            self.delete_col_lil(self.adjacency, i)
+
 
             # Merge communities
             self.communities[j] = list(set(self.communities[i]).union(set(self.communities[j])))
@@ -386,10 +436,9 @@ class FastModularity(object):
 
             num_clusters = len(self.communities)
 
-            if num_clusters % 10 == 0:
-                print("Process: {}".format(num_clusters))
+            self.time_in_matrix.append(datetime.datetime.utcnow() - current)
 
 
-        return self.postprocess_communities()
+        return self.communities#self.postprocess_communities()
 
         
