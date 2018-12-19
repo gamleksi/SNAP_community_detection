@@ -45,15 +45,10 @@ def update_loss(loss, algo, representation, graph_file, k):
         writer.writerow(row)
         f.close()
 
- graph_files = [
-         "ca-GrQc.txt", "Oregon-1.txt",
-         "soc-Epinions1.txt", "web-NotreDame.txt" ]
+graph_files = ["ca-GrQc.txt", "Oregon-1.txt",
+        "soc-Epinions1.txt", "web-NotreDame.txt" ]
 
- Ks = [2, 5, 10, 20]
-
-graph_files = ["ca-GrQc.txt"]
-
-Ks = [2]
+Ks = [2, 5, 10, 20]
 
 CSV_LOG_PATH = 'log.csv'
 
