@@ -69,8 +69,8 @@ if __name__ == '__main__':
         adjacency_matrix = helpers.calculate_adjacency_matrix(graph_data)
 
         cluster_algos = [
-                (KMeans(n_clusters=k, n_init=10), 'KMeans'),
-                (helpers.BalancedKMeans(k, n_init=10, graph_data=graph_data), 'Balanced Kmeans')]
+                (KMeans(n_clusters=k, n_init=30), 'KMeans'),
+                (helpers.BalancedKMeans(k, n_init=30, graph_data=graph_data), 'Balanced Kmeans')]
 
         # L_rw = helpers.calculate_normalized_random_walk_laplacian(adjacency_matrix)
 
