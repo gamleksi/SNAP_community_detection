@@ -96,9 +96,6 @@ if __name__ == '__main__':
 
     graph_files = [args.load_graph]
 
-    if args.num_clusters < 1:
-        raise ValueError('You need to define the number of clusters!')
-
     Ks = [args.num_clusters]
 
     if args.load_all:
@@ -112,6 +109,9 @@ if __name__ == '__main__':
     if args.non_competitive:
         graph_files = competitive_files
         Ks = competitive_Ks
+
+    if args.num_clusters < 1 and not(args.non_competitive or args.competitive or args.load_all):
+        raise ValueError('You need to define the number of clusters!')
 
     assert(len(graph_files) == len(Ks))
 
