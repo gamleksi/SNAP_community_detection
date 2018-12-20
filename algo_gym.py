@@ -10,12 +10,6 @@ import multiprocessing as mp
 import argparse
 
 
-
-
-
-
-args = parser.parse_args()
-
 def fit_algo(algo_pair):
 
     algo = algo_pair[0][0]
@@ -37,11 +31,10 @@ def write_result(labels, graph_file, header):
             f.write(str(vertex_id) + " " + str(int(label)) + "\n")
         f.close()
 
-def update_loss(loss, algo, representation, graph_file, k):
+def update_loss(loss, algo, representation, graph_file, k, csv_path):
     row = {'loss': loss, 'algo': algo,
             'representation': representation,
             'file': graph_file, 'k': k}
-    csv_path = CSV_LOG_PATH
     file_exists = os.path.isfile(csv_path)
 
     with open(csv_path, 'a') as f:
@@ -51,49 +44,82 @@ def update_loss(loss, algo, representation, graph_file, k):
         writer.writerow(row)
         f.close()
 
+def parse_arguments():
 
-# graph_files = ["ca-HepTh.txt", "ca-HepPh.txt", "ca-CondMat.txt", "ca-AstroPh.txt"]
-# Ks = [20, 25, 100, 50]
+    parser = argparse.ArgumentParser(description='Algo Gym')
+
+    parser.add_argument('--log-to', default='log.csv', type=str, help='Default log.csv')
+
+    parser.add_argument('--kmean-workers', default=4, type=int, help='The number of workers for Kmean')
+
+    parser.add_argument('--balanced', dest='run_balanced', action='store_true', help='Run a Balanced KMean')
+    parser.set_defaults(run_balanced=False)
+
+    parser.add_argument('--kmean', dest='run_kmean', action='store_true', help='Runs a KMean')
+    parser.set_defaults(run_kmean=False)
+
+    parser.add_argument('--fast', dest='run_fast', action='store_true', help='Runs a Fast modularity')
+    parser.set_defaults(run_fast=False)
+
+    parser.add_argument('--num-clusters', default=-1, type=int, help='Check the correspondance for the graph. Pairs are commented in algo_gym.py')
+
+    parser.add_argument('--load-graph', default='ca-GrQc.txt', type=str, help='graph file')
+
+    parser.add_argument('--all-graphs', dest='load_all', action='store_true', help='This ignores Web-NotreDame, zachary, and roadnet')
+    parser.set_defaults(load_all=False)
+
+    parser.add_argument('--non-competitive', dest='non_competitive', action='store_true', help='Non competitive graphs (Project part 1 graphs)')
+    parser.set_defaults(non_competitive=False)
+
+    parser.add_argument('--competitive', dest='competitive', action='store_true', help='Competitive graphs (ignores Web-NotreDame, zachary, and roadnet)')
+    parser.set_defaults(competitive=False)
+
+    args = parser.parse_args()
+
+    return args
 
 
-# graph_files = ["ca-GrQc.txt", "Oregon-1.txt",
-#        "soc-Epinions1.txt", "web-NotreDame.txt"]
-
-# Ks = [2, 5, 10, 20]
-
-parser = argparse.ArgumentParser(description='Algo Gym')
-
-parser.add_argument('--log-to', default='log.csv', type=str, help='Default log.csv')
-
-parser.add_argument('--kmean-workers', default=4, type=int, help='The number of workers for Kmean')
-
-parser.add_argument('--no-balanced', dest='run_balanced', action='store_false', help='No Balanced KMean')
-parser.set_defaults(run_balanced=True)
-
-parser.add_argument('--no-kmean', dest='run_kmean', action='store_false', help='No regular KMean')
-parser.set_defaults(run_kmean=True)
-
-parser.add_argument('--no-fast', dest='run_fast', action='store_false', help='No Fast modularity')
-parser.set_defaults(run_fast=True)
-
-parser.add_argument('--load-graph', dest='run_fast', action='store_false', help='No Fast modularity')
-parser.set_defaults(run_fast=True)
-
-parser.add_arguments()
-
-args = parser.parse_args()
-
-CSV_LOG_PATH = args.log_to
 
 if __name__ == '__main__':
+    # These values are from the project documentation
+
+    non_competitive_files = ["ca-HepTh.txt", "ca-HepPh.txt", "ca-CondMat.txt", "ca-AstroPh.txt"]
+    non_competitive_Ks = [20, 25, 100, 50]
+
+    competitive_files = ["ca-GrQc.txt", "Oregon-1.txt",
+           "soc-Epinions1.txt"]
+    competitive_Ks = [2, 5, 10]
+
+    args = parse_arguments()
+
+    graph_files = [args.load_graph]
+
+    if args.num_clusters < 1:
+        raise ValueError('You need to define the number of clusters!')
+
+    Ks = [args.num_clusters]
+
+    if args.load_all:
+        graph_files = non_competitive_files + competitive_files
+        Ks = non_competitive_Ks + competitive_Ks
+
+    if args.non_competitive:
+        graph_files = non_competitive_files
+        Ks = non_competitive_Ks
+
+    if args.non_competitive:
+        graph_files = competitive_files
+        Ks = competitive_Ks
 
     assert(len(graph_files) == len(Ks))
 
     for graph_file, k in zip(graph_files, Ks):
+
         print("Running {} with k={}".format(graph_file, k))
 
         graph_data, header = helpers.load_graph(graph_file)
         print("Graph data loaded.")
+
         adjacency_matrix = helpers.calculate_adjacency_matrix(graph_data)
 
         algo_pairs = []
@@ -114,6 +140,9 @@ if __name__ == '__main__':
 
         print("Starting clustering...")
 
+        if len(algo_pairs) < 1:
+            raise ValueError('No algorithms introduced!')
+
         results = []
         pool = mp.Pool(processes=len(algo_pairs))
         for res in pool.imap(fit_algo, algo_pairs, chunksize=1):
@@ -121,7 +150,6 @@ if __name__ == '__main__':
 
         best_loss = np.inf
         best_labels = []
-        best_algo = "No algos"
 
         for labels, algo_name, data_name in results:
 
@@ -132,9 +160,8 @@ if __name__ == '__main__':
                 best_loss = loss
                 best_algo = algo_name
             print(algo_name, data_name, loss)
-            update_loss(loss, algo_name, data_name, graph_file, k)
+            update_loss(loss, algo_name, data_name, graph_file, k, args.log_to)
 
         print("Best algo for ", graph_file, best_algo)
         write_result(best_labels, graph_file, header)
 
-        results = []
