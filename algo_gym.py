@@ -79,8 +79,10 @@ def parse_arguments():
     return args
 
 
-
+# You need to define at least one algo to run this!
 if __name__ == '__main__':
+
+
     # These values are from the project documentation
 
     non_competitive_files = ["ca-HepTh.txt", "ca-HepPh.txt", "ca-CondMat.txt", "ca-AstroPh.txt"]
