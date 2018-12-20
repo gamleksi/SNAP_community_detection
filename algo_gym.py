@@ -9,7 +9,7 @@ import scipy
 import multiprocessing as mp
 
 
-def fit_algo(algo_pair):
+def fit_algo(algo_pair, output):
 
     algo = algo_pair[0][0]
     data = algo_pair[1][0]
@@ -19,12 +19,12 @@ def fit_algo(algo_pair):
     print("Running ", algo_name, data_name)
 
     labels = algo.fit_predict(data)
-
-    return (labels, algo_name, data_name)
+    print("End ", algo_name, data_name)
+    output.put((labels, algo_name, data_name))
 
 def write_result(labels, graph_file, header):
 
-    save_path = graph_file[:-4] + ".output"
+    save_path = graph_file[:-4] + "2.output"
     with open(save_path, 'w') as f:
         f.write(header + "\n")
         for vertex_id, label in enumerate(labels):
@@ -84,9 +84,19 @@ if __name__ == '__main__':
         best_labels = []
 
         print("Laplacian calculated. Starting clustering...")
+        output = mp.Queue()
+        P = mp.Process(target=len(algo_pairs))
+        processes = [mp.Process(target=fit_algo, args=(algo_pairs[-idx], output)) for idx in range(1, len(algo_pairs) + 1)]
 
-        pool = mp.Pool(len(algo_pairs))
-        results = [pool.apply(fit_algo, args=(algo_pairs[idx],)) for idx in range(len(algo_pairs))]
+        # Run processes
+        for p in processes:
+            p.start()
+
+        # Exit the completed processes
+        for p in processes:
+            p.join()
+
+        results = [output.get() for p in processes]
 
         best_loss = np.inf
         best_labels = []
