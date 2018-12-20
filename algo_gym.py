@@ -19,7 +19,7 @@ def fit_algo(algo_pair):
 
     print("Running ", algo_name, data_name)
     labels = algo.fit_predict(data)
-    print("End ", algo_name, data_name)
+
     return (labels, algo_name, data_name)
 
 def write_result(labels, graph_file, header):
@@ -84,7 +84,6 @@ if __name__ == '__main__':
 
 
     # These values are from the project documentation
-
     non_competitive_files = ["ca-HepTh.txt", "ca-HepPh.txt", "ca-CondMat.txt", "ca-AstroPh.txt"]
     non_competitive_Ks = [20, 25, 100, 50]
 
@@ -145,15 +144,11 @@ if __name__ == '__main__':
         if len(algo_pairs) < 1:
             raise ValueError('No algorithms introduced!')
 
-        results = []
-        pool = mp.Pool(processes=len(algo_pairs))
-        for res in pool.imap(fit_algo, algo_pairs, chunksize=1):
-            results.append(res)
-
         best_loss = np.inf
         best_labels = []
 
-        for labels, algo_name, data_name in results:
+        pool = mp.Pool(processes=len(algo_pairs))
+        for labels, algo_name, data_name in pool.imap(fit_algo, algo_pairs, chunksize=1):
 
             loss = helpers.objective_function(graph_data, labels)
 
@@ -161,9 +156,11 @@ if __name__ == '__main__':
                 best_labels = labels
                 best_loss = loss
                 best_algo = algo_name
-            print(algo_name, data_name, loss)
+
+            print("{} with {} result: {}".format(algo_name, data_name, loss))
+
             update_loss(loss, algo_name, data_name, graph_file, k, args.log_to)
+            write_result(best_labels, algo_name + "-"  + graph_file, header)
 
         print("Best algo for ", graph_file, best_algo)
         write_result(best_labels, graph_file, header)
-
