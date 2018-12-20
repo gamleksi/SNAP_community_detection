@@ -10,6 +10,7 @@ import sklearn
 import datetime
 from bisect import bisect_left
 import tqdm
+from gensim.models import Word2Vec
 
 
 ###### Graph loading
@@ -555,3 +556,84 @@ class LabelPropagation(object):
 
         return self.postprocess_communities()
 
+
+
+
+class DeepWalk(object):
+    def __init__(self, n_clusters, adjacency_matrix, num_walks=10, len_walk=40):
+        self.n_clusters = n_clusters
+        self.adjacency_matrix = adjacency_matrix
+
+        # Build graph
+        self.graph = self.build_graph(adjacency_matrix)
+        self.num_walks = num_walks
+        self.len_walk = len_walk
+        self.corpus = None
+        self.w2v = None
+
+
+    def build_graph(self, adjacency_matrix):
+        G = {}
+        N = adjacency_matrix.shape[0]
+
+        print("Building graph...")
+        for i in tqdm.tqdm(range(N)):
+            node_neighbor_idxs = (adjacency_matrix[i,:] == 1).nonzero()[1]
+
+            # Remove possible self loop
+            if i in node_neighbor_idxs:
+                idx = np.where(node_neighbor_idxs == i)[0]
+                node_neighbor_idxs = np.delete(node_neighbor_idxs, idx)
+
+            G[i] = node_neighbor_idxs
+
+        return G
+
+    def random_walk(self, start_node):
+        path = [start_node]
+
+        while len(path) < self.len_walk:
+            current_node = path[-1]
+            next_node = np.random.choice(self.graph[current_node])
+
+            path.append(next_node)
+
+        return [str(p) for p in path]
+
+
+    def build_corpus(self):
+        corpus = []
+        nodes = np.asarray(list(self.graph.keys()))
+        
+
+        # Todo: parallelize
+        for w in tqdm.tqdm(range(self.num_walks)):
+            np.random.shuffle(nodes)
+            for node in nodes:
+                corpus.append(self.random_walk(node))
+
+        return corpus
+
+
+    def fit_predict(self, data, workers=10, window=5, dimensionality=64, iterations=10, embedding_savefile=None, clustering_alg=KMeans):
+        print("Generating walks...")
+        self.corpus = self.build_corpus()
+
+        print("Starting training...")
+        self.w2v = Word2Vec(self.corpus, size=dimensionality, window=window, min_count=0, sg=1, hs=1, workers=workers, iter=iterations)
+
+        if embedding_savefile is not None:
+            # Save w2v embeddings to file
+            self.w2v.wv.save_word2vec_format(embedding_savefile)
+
+        print("Clustering...")
+        embedding = self.w2v.wv.vectors
+        node_idxs = np.asarray(self.w2v.wv.index2word).astype(np.int32)
+        order = np.argsort(node_idxs)
+
+        embedding = embedding[order]
+
+        alg = clustering_alg(n_clusters=self.n_clusters, n_init=10)
+        labels = alg.fit_predict(embedding)
+
+        return labels
