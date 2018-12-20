@@ -79,7 +79,7 @@ def parse_arguments():
     return args
 
 
-# You need to define at least one algo to run this!
+# You need to define at least one algo and the number clusters to run this!
 if __name__ == '__main__':
 
 
