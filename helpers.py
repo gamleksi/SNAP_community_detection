@@ -11,6 +11,9 @@ import datetime
 from bisect import bisect_left
 import tqdm
 from gensim.models import Word2Vec
+from gensim.models.callbacks import CallbackAny2Vec
+import multiprocessing as mp
+
 
 
 ###### Graph loading
@@ -558,9 +561,24 @@ class LabelPropagation(object):
 
 
 
+class EpochLogger(CallbackAny2Vec):
+    '''Callback to log information about training'''
+
+    def __init__(self):
+        self.epoch = 0
+        self.epoch_start = None
+
+    def on_epoch_end(self, model):
+        elapsed = datetime.datetime.utcnow() - self.epoch_start
+        print("Epoch #{} end, elapsed: {}".format(self.epoch, elapsed))
+        self.epoch += 1
+
+    def on_epoch_begin(self, model):
+        self.epoch_start = datetime.datetime.utcnow()
+
 
 class DeepWalk(object):
-    def __init__(self, n_clusters, adjacency_matrix, num_walks=10, len_walk=40):
+    def __init__(self, n_clusters, adjacency_matrix, num_walks=10, len_walk=40, embedding_savefile=None):
         self.n_clusters = n_clusters
         self.adjacency_matrix = adjacency_matrix
 
@@ -570,6 +588,7 @@ class DeepWalk(object):
         self.len_walk = len_walk
         self.corpus = None
         self.w2v = None
+        self.embedding_savefile = embedding_savefile
 
 
     def build_graph(self, adjacency_matrix):
@@ -601,30 +620,49 @@ class DeepWalk(object):
         return [str(p) for p in path]
 
 
-    def build_corpus(self):
+    def build_corpus(self, workers):
         corpus = []
         nodes = np.asarray(list(self.graph.keys()))
         
 
         # Todo: parallelize
+        """
         for w in tqdm.tqdm(range(self.num_walks)):
             np.random.shuffle(nodes)
-            for node in nodes:
+            pool = mp.Pool(workers)
+
+            walks = []
+            for walk in pool.imap(self.random_walk, nodes, chunksize=500):
+                walks.append(walk)
+
+            corpus.extend(walks)
+        """
+        for w in tqdm.tqdm(range(self.num_walks)):
+            np.random.shuffle(nodes)
+            for node in tqdm.tqdm(nodes):
                 corpus.append(self.random_walk(node))
 
         return corpus
 
 
-    def fit_predict(self, data, workers=10, window=5, dimensionality=64, iterations=10, embedding_savefile=None, clustering_alg=KMeans):
+    def fit_predict(self, data, workers=10, window=5, dimensionality=64, iterations=10, clustering_alg=KMeans):
         print("Generating walks...")
-        self.corpus = self.build_corpus()
+        self.corpus = self.build_corpus(workers)
 
         print("Starting training...")
-        self.w2v = Word2Vec(self.corpus, size=dimensionality, window=window, min_count=0, sg=1, hs=1, workers=workers, iter=iterations)
+        self.w2v = Word2Vec(self.corpus, 
+                            size=dimensionality, 
+                            window=window, 
+                            min_count=0, 
+                            sg=1,
+                            hs=1, 
+                            workers=workers, 
+                            iter=iterations,
+                            callbacks=[EpochLogger()])
 
-        if embedding_savefile is not None:
+        if self.embedding_savefile is not None:
             # Save w2v embeddings to file
-            self.w2v.wv.save_word2vec_format(embedding_savefile)
+            self.w2v.wv.save_word2vec_format(self.embedding_savefile)
 
         print("Clustering...")
         embedding = self.w2v.wv.vectors

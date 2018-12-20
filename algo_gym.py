@@ -61,6 +61,10 @@ def parse_arguments():
     parser.add_argument('--fast', dest='run_fast', action='store_true', help='Runs a Fast modularity')
     parser.set_defaults(run_fast=False)
 
+    parser.add_argument('--deep', dest='run_deep', action='store_true', help='Runs a Deep Walk')
+    parser.set_defaults(run_deep=False)
+
+
     parser.add_argument('--num-clusters', default=-1, type=int, help='Check the correspondance for the graph. Pairs are commented in algo_gym.py')
 
     parser.add_argument('--load-graph', default='ca-GrQc.txt', type=str, help='graph file')
@@ -138,6 +142,9 @@ if __name__ == '__main__':
 
         if (args.run_fast):
             algo_pairs.append(((helpers.FastModularity(k, adjacency_matrix), 'Fast Modularity'), (None, "Nothing for fast modularity")))
+
+        if args.run_deep:
+            algo_pairs.append(((helpers.DeepWalk(k, adjacency_matrix, num_walks=10, len_walk=40), 'Fast Modularity'), (None, "Nothing for deep walk")))
 
         print("Starting clustering...")
 
