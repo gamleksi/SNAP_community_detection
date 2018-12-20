@@ -19,12 +19,13 @@ def fit_algo(algo_pair):
     print("Running ", algo_name, data_name)
 
     labels = algo.fit_predict(data)
-
+    print("End ", algo_name, data_name)
     return (labels, algo_name, data_name)
+    # output.put((labels, algo_name, data_name))
 
 def write_result(labels, graph_file, header):
 
-    save_path = graph_file[:-4] + ".output"
+    save_path = graph_file[:-4] + "2.output"
     with open(save_path, 'w') as f:
         f.write(header + "\n")
         for vertex_id, label in enumerate(labels):
@@ -63,30 +64,25 @@ if __name__ == '__main__':
         print("Graph data loaded.")
         adjacency_matrix = helpers.calculate_adjacency_matrix(graph_data)
 
-        cluster_algos = [
-                (KMeans(n_clusters=k, n_init=30), 'KMeans'),
-                (helpers.BalancedKMeans(k, n_init=30, graph_data=graph_data), 'Balanced Kmeans')]
-
         # L_rw = helpers.calculate_normalized_random_walk_laplacian(adjacency_matrix)
-
         # Laplacian norm with nx and its U_norm
         L_norm, dd = scipy.sparse.csgraph.laplacian(adjacency_matrix, normed=True,
                                     return_diag=True)
         U_norm = helpers.calculate_U_norm(L_norm, k)
-
         embedding = helpers.calculate_embedding_representation(L_norm, dd, k)
 
-        representations = [(U_norm, 'U_norm'), (embedding, 'embedding')]
-        algo_pairs = list(itertools.product(cluster_algos, representations))
+        algo_pairs = [((KMeans(n_clusters=k, n_init=30), 'KMeans'), (embedding, 'embedding'))]
+        algo_pairs.append(((KMeans(n_clusters=k, n_init=30), 'KMeans'), (U_norm, 'U_norm')))
+        algo_pairs.append(((helpers.BalancedKMeans(k, n_init=30, graph_data=graph_data), 'Balanced Kmeans'), (U_norm, 'U_norm')))
+        algo_pairs.append(((helpers.BalancedKMeans(k, n_init=30, graph_data=graph_data), 'Balanced Kmeans'), (embedding, 'embedding')))
         algo_pairs.append(((helpers.FastModularity(k, adjacency_matrix), 'Fast Modularity'), (None, "Nothing for fast modularity")))
-
-        best_loss = np.inf
-        best_labels = []
 
         print("Laplacian calculated. Starting clustering...")
 
-        pool = mp.Pool(len(algo_pairs))
-        results = [pool.apply(fit_algo, args=(algo_pairs[idx],)) for idx in range(len(algo_pairs))]
+        results = []
+        pool = mp.Pool(processes=len(algo_pairs))
+        for res in pool.imap(fit_algo, algo_pairs, chunksize=1):
+            results.append(res)
 
         best_loss = np.inf
         best_labels = []
