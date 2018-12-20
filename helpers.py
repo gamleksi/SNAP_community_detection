@@ -444,3 +444,114 @@ class FastModularity(object):
         return self.postprocess_communities(self.communities)
 
         
+
+class LabelPropagation(object):
+
+    class Node():
+        def __init__(self, idx):
+            self.idx = idx
+            self.label = idx
+            self.neighbors = []
+            self.last_update = 0
+
+        def update_label(self):
+            neighbor_labels = np.asarray([n.label for n in self.neighbors])
+
+            # Random tiebreaking argmax
+            new_label = np.random.choice(np.flatnonzero(neighbor_labels == neighbor_labels.max()))
+            self.label = new_label
+
+        def check_satisfied(self):
+            neighbor_labels = np.asarray([n.label for n in self.neighbors])
+            max_labels = np.flatnonzero(neighbor_labels == neighbor_labels.max())
+            if self.label in max_labels:
+                return True
+            else:
+                return False
+            
+
+
+    def __init__(self, n_clusters, adjacency_matrix, iterations=10):
+        self.adjacency = adjacency_matrix
+        self.nodes = self.construct_nodes(self.adjacency)
+        self.N = self.adjacency.shape[0]
+        self.iterations = iterations
+        self.n_clusters = n_clusters
+
+    
+    def construct_nodes(self, adjacency_matrix):
+        # First, construct nodes
+        N = adjacency_matrix.shape[0]
+        nodes = []
+        for i in tqdm.tqdm(range(N)):
+            node = self.Node(i)
+            nodes.append(node)
+
+        # Then, define their neighbors
+        for i in tqdm.tqdm(range(N)):
+            node_neighbor_idxs = (adjacency_matrix[i,:] == 1).nonzero()[1]
+            neighbors = [nodes[k] for k in node_neighbor_idxs]
+            nodes[i].neighbors = neighbors
+
+        return nodes
+
+    def postprocess_communities(self):
+        print("Postprocessing...")
+        found_labels = np.asarray([n.label for n in self.nodes])
+        uniques = np.unique(found_labels, return_counts=True)
+        num_communities = len(uniques[0])
+
+        while num_communities > self.n_clusters:
+            # Combine smallest clusters until n_clusters achieved
+            smallest_cluster_idxs = np.argsort(uniques[1])
+            smallest = smallest_cluster_idxs[0]
+            second_smallest = smallest_cluster_idxs[1]
+
+            smallest_label = uniques[0][smallest]
+            second_smallest_label = uniques[0][second_smallest]
+
+            smallest_community_members = np.where(found_labels == smallest_label)
+            for member in smallest_community_members[0]:
+                self.nodes[member].label = second_smallest_label
+
+            found_labels = np.asarray([n.label for n in self.nodes])
+            uniques = np.unique(found_labels, return_counts=True)
+            num_communities = len(uniques[0])
+
+
+        labels = []
+        for i in range(self.N):
+            assert(i == self.nodes[i].idx)
+            labels.append(self.nodes[i].label)
+
+        return labels
+
+    def fit_predict(self, data):
+        # Data unused
+        for t in tqdm.tqdm(range(self.iterations)):
+            permutation = np.random.permutation(self.N)
+            for p in permutation:
+                current_node = self.nodes[p]
+                current_node.update_label()
+
+
+            """
+            # Check if nodes satisfy stopping criterio
+            num_unsatisfied = 0
+            for n in self.nodes:
+                if not n.check_satisfied():
+                    num_unsatisfied += 1
+
+
+            if num_unsatisfied / self.N < self.tolerance:
+                satisfied = True
+
+            """
+            unique_labels = np.unique(np.asarray([n.label for n in self.nodes]))
+            print("Iteration {}, unique labels num: {}".format(t, len(unique_labels)))
+            t += 1
+
+        print("Done".format(t))
+
+        return self.postprocess_communities()
+
