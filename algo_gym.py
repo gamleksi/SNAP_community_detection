@@ -7,7 +7,14 @@ import itertools
 import csv
 import scipy
 import multiprocessing as mp
+import argparse
 
+
+
+
+
+
+args = parser.parse_args()
 
 def fit_algo(algo_pair):
 
@@ -17,15 +24,13 @@ def fit_algo(algo_pair):
     data_name = algo_pair[1][1]
 
     print("Running ", algo_name, data_name)
-
     labels = algo.fit_predict(data)
     print("End ", algo_name, data_name)
     return (labels, algo_name, data_name)
-    # output.put((labels, algo_name, data_name))
 
 def write_result(labels, graph_file, header):
 
-    save_path = graph_file[:-4] + "2.output"
+    save_path = graph_file[:-4] + ".output"
     with open(save_path, 'w') as f:
         f.write(header + "\n")
         for vertex_id, label in enumerate(labels):
@@ -46,38 +51,68 @@ def update_loss(loss, algo, representation, graph_file, k):
         writer.writerow(row)
         f.close()
 
-graph_files = ["ca-GrQc.txt", "Oregon-1.txt",
-        "soc-Epinions1.txt", "web-NotreDame.txt" ]
 
-Ks = [2, 5, 10, 20]
+# graph_files = ["ca-HepTh.txt", "ca-HepPh.txt", "ca-CondMat.txt", "ca-AstroPh.txt"]
+# Ks = [20, 25, 100, 50]
 
-CSV_LOG_PATH = 'log.csv'
+
+# graph_files = ["ca-GrQc.txt", "Oregon-1.txt",
+#        "soc-Epinions1.txt", "web-NotreDame.txt"]
+
+# Ks = [2, 5, 10, 20]
+
+parser = argparse.ArgumentParser(description='Algo Gym')
+
+parser.add_argument('--log-to', default='log.csv', type=str, help='Default log.csv')
+
+parser.add_argument('--kmean-workers', default=4, type=int, help='The number of workers for Kmean')
+
+parser.add_argument('--no-balanced', dest='run_balanced', action='store_false', help='No Balanced KMean')
+parser.set_defaults(run_balanced=True)
+
+parser.add_argument('--no-kmean', dest='run_kmean', action='store_false', help='No regular KMean')
+parser.set_defaults(run_kmean=True)
+
+parser.add_argument('--no-fast', dest='run_fast', action='store_false', help='No Fast modularity')
+parser.set_defaults(run_fast=True)
+
+parser.add_argument('--load-graph', dest='run_fast', action='store_false', help='No Fast modularity')
+parser.set_defaults(run_fast=True)
+
+parser.add_arguments()
+
+args = parser.parse_args()
+
+CSV_LOG_PATH = args.log_to
 
 if __name__ == '__main__':
 
     assert(len(graph_files) == len(Ks))
 
     for graph_file, k in zip(graph_files, Ks):
-        print("Running {}".format(graph_file))
+        print("Running {} with k={}".format(graph_file, k))
 
         graph_data, header = helpers.load_graph(graph_file)
         print("Graph data loaded.")
         adjacency_matrix = helpers.calculate_adjacency_matrix(graph_data)
 
-        # L_rw = helpers.calculate_normalized_random_walk_laplacian(adjacency_matrix)
-        # Laplacian norm with nx and its U_norm
-        L_norm, dd = scipy.sparse.csgraph.laplacian(adjacency_matrix, normed=True,
-                                    return_diag=True)
-        U_norm = helpers.calculate_U_norm(L_norm, k)
-        embedding = helpers.calculate_embedding_representation(L_norm, dd, k)
+        algo_pairs = []
 
-        algo_pairs = [((KMeans(n_clusters=k, n_init=30), 'KMeans'), (embedding, 'embedding'))]
-        algo_pairs.append(((KMeans(n_clusters=k, n_init=30), 'KMeans'), (U_norm, 'U_norm')))
-        algo_pairs.append(((helpers.BalancedKMeans(k, n_init=30, graph_data=graph_data), 'Balanced Kmeans'), (U_norm, 'U_norm')))
-        algo_pairs.append(((helpers.BalancedKMeans(k, n_init=30, graph_data=graph_data), 'Balanced Kmeans'), (embedding, 'embedding')))
-        algo_pairs.append(((helpers.FastModularity(k, adjacency_matrix), 'Fast Modularity'), (None, "Nothing for fast modularity")))
+        if (args.run_kmean or args.run_balanced):
+            L_norm, dd = scipy.sparse.csgraph.laplacian(adjacency_matrix, normed=True, return_diag=True)
+            embedding = helpers.calculate_embedding_representation(L_norm, dd, k)
 
-        print("Laplacian calculated. Starting clustering...")
+            print("Laplacian calculated.")
+            if args.run_kmean:
+                algo_pairs.append((((KMeans(n_clusters=k, n_init=50, n_jobs=args.kmean_workers), 'KMeans'), (embedding, 'embedding'))))
+
+            if args.run_balanced:
+                algo_pairs.append(((helpers.BalancedKMeans(k, n_init=30, graph_data=graph_data), 'Balanced Kmeans'), (embedding, 'embedding')))
+
+        if (args.run_fast):
+            algo_pairs.append(((helpers.FastModularity(k, adjacency_matrix), 'Fast Modularity'), (None, "Nothing for fast modularity")))
+
+        print("Starting clustering...")
 
         results = []
         pool = mp.Pool(processes=len(algo_pairs))
@@ -86,7 +121,7 @@ if __name__ == '__main__':
 
         best_loss = np.inf
         best_labels = []
-        best_algo = " "
+        best_algo = "No algos"
 
         for labels, algo_name, data_name in results:
 

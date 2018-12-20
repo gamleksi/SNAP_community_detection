@@ -240,7 +240,7 @@ class BalancedKMeans(object):
                 labels[cond] = i
         return labels
 
-    def fit_predict(self, points, iterations=1000, diff=0.001):
+    def fit_predict(self, points, iterations=400, diff=0.0001):
 
         labels = np.zeros((self.n_init, points.shape[0]))
         results = np.zeros(self.n_init)
@@ -316,7 +316,7 @@ class FastModularity(object):
                 continue
 
             val = 0.5*self.m - self.degrees[i]*self.degrees[j]/(2*self.m)**2 # Eq. 8 in the paper
-            delta_Q[i,j] = delta_Q[j,i] = val 
+            delta_Q[i,j] = delta_Q[j,i] = val
 
         return delta_Q
 
@@ -345,7 +345,7 @@ class FastModularity(object):
             community = communities[idx]
             for vert in community:
                 processed[vert] = idx
-                
+
         output = []
         for i in range(len(processed)):
             output.append(processed[i])
@@ -363,7 +363,7 @@ class FastModularity(object):
     def delete_col_lil(self, mat, j):
         if not isinstance(mat, scipy.sparse.lil_matrix):
             raise ValueError("works only for LIL format -- use .tolil() first")
-            
+
         if j < 0:
             j += mat.shape[1]
 
@@ -412,7 +412,7 @@ class FastModularity(object):
             self.update_delta_Q(i, j)
             # Delete i'th row and col from Q
             to_keep = [idx for idx in range(self.delta_Q.shape[0]) if idx != i] # Indexes which to keep, all but i
-            
+
             self.delete_row_lil(self.delta_Q, i)
             self.delete_col_lil(self.delta_Q, i)
 
@@ -443,4 +443,4 @@ class FastModularity(object):
 
         return self.postprocess_communities(self.communities)
 
-        
+
