@@ -23,7 +23,7 @@ def load_graph(graph_file, graph_dir = "./graphs_processed"):
         for line in f:
             line_strip = line.rstrip()
             components = line_strip.split(' ')
-            line_data = (int(components[0]) - 1, int(components[1]) - 1)
+            line_data = (int(components[0]), int(components[1]))
             graph_data.append(line_data)
 
         f.close()
