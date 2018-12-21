@@ -143,7 +143,7 @@ def spectral_cluster(adjacency_matrix=None, manual_laplacian=False, k=2, normali
 
     # Do clustering for U_norm
     if graph_data is None:
-        clf = cluster_alg(n_clusters=k, n_init=10)
+        clf = cluster_alg(n_clusters=k, n_init=100)
     else:
         clf = cluster_alg(n_clusters=k, n_init=10, graph_data=graph_data)
 
@@ -151,7 +151,7 @@ def spectral_cluster(adjacency_matrix=None, manual_laplacian=False, k=2, normali
     embedding = calculate_embedding_representation(L, dd, k)
     """
 
-    C_labels = clf.fit_predict(U_norm)
+    C_labels = clf.fit_predict(embedding)
 
     return C_labels # Return U_norm for cluster debugging
 

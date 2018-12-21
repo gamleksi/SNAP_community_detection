@@ -64,6 +64,9 @@ def parse_arguments():
     parser.add_argument('--deep', dest='run_deep', action='store_true', help='Runs a Deep Walk')
     parser.set_defaults(run_deep=False)
 
+    parser.add_argument('--labelprop', dest='run_labelprop', action='store_true', help='Runs Labelpropagation')
+    parser.set_defaults(run_labelprop=False)
+
 
     parser.add_argument('--num-clusters', default=-1, type=int, help='Check the correspondance for the graph. Pairs are commented in algo_gym.py')
 
@@ -109,7 +112,7 @@ if __name__ == '__main__':
         graph_files = non_competitive_files
         Ks = non_competitive_Ks
 
-    if args.non_competitive:
+    if args.competitive:
         graph_files = competitive_files
         Ks = competitive_Ks
 
@@ -144,7 +147,13 @@ if __name__ == '__main__':
             algo_pairs.append(((helpers.FastModularity(k, adjacency_matrix), 'Fast Modularity'), (None, "Nothing for fast modularity")))
 
         if args.run_deep:
-            algo_pairs.append(((helpers.DeepWalk(k, adjacency_matrix, num_walks=10, len_walk=40), 'Fast Modularity'), (None, "Nothing for deep walk")))
+            savefile = graph_file[:-4] + '.embedding'
+            algo_pairs.append(((helpers.DeepWalk(k, adjacency_matrix, num_walks=10, len_walk=40, embedding_savefile=savefile), 'Deep walk'), (None, "Nothing for deep walk")))
+
+
+        if args.run_labelprop:
+            algo_pairs.append(((helpers.LabelPropagation(k, adjacency_matrix), 'Labelpropagation'), (None, "Nothing for labelprop")))
+
 
         print("Starting clustering...")
 
@@ -156,7 +165,7 @@ if __name__ == '__main__':
 
         pool = mp.Pool(processes=len(algo_pairs))
         for labels, algo_name, data_name in pool.imap(fit_algo, algo_pairs, chunksize=1):
-
+            print("{} finished".format(algo_name))
             loss = helpers.objective_function(graph_data, labels)
 
             if (loss < best_loss):
