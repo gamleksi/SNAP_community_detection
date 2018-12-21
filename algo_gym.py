@@ -152,6 +152,8 @@ if __name__ == '__main__':
 
 
         if args.run_labelprop:
+            import sys
+            sys.setrecursionlimit(100000)
             algo_pairs.append(((helpers.LabelPropagation(k, adjacency_matrix), 'Labelpropagation'), (None, "Nothing for labelprop")))
 
 

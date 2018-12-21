@@ -283,9 +283,10 @@ class BalancedKMeans(object):
 
 # https://arxiv.org/pdf/cond-mat/0408187.pdf
 class FastModularity(object):
-    def __init__(self, n_clusters, adjacency_matrix):
+    def __init__(self, n_clusters, adjacency_matrix, stop_at_optimal=False):
         self.n_clusters = n_clusters
         self.adjacency = adjacency_matrix.tolil()
+        self.stop_at_optimal = stop_at_optimal
 
         N = adjacency_matrix.shape[0]
 
@@ -405,6 +406,11 @@ class FastModularity(object):
             j = largest_index % self.adjacency.shape[1]
 
             if i == j:
+                # Optimal structure reached
+                if self.stop_at_optimal:
+                    print("Stopping at {} communities.".format(num_clusters))
+                    break
+
                 # Connect some small communities
                 community_sizes = np.asarray([len(c) for c in self.communities])
                 smallest_communities = np.argpartition(community_sizes, 2)
@@ -443,38 +449,32 @@ class FastModularity(object):
 
             num_clusters = len(self.communities)
 
-
-
         return self.postprocess_communities(self.communities)
 
         
+class Node():
+    def __init__(self, idx):
+        self.idx = idx
+        self.label = idx
+        self.neighbors = []
+        self.last_update = 0
+
+    def update_label(self):
+        neighbor_labels = np.asarray([n.label for n in self.neighbors])
+
+        # Random tiebreaking argmax
+        new_label = np.random.choice(np.flatnonzero(neighbor_labels == neighbor_labels.max()))
+        self.label = new_label
+
+    def check_satisfied(self):
+        neighbor_labels = np.asarray([n.label for n in self.neighbors])
+        max_labels = np.flatnonzero(neighbor_labels == neighbor_labels.max())
+        if self.label in max_labels:
+            return True
+        else:
+            return False
 
 class LabelPropagation(object):
-
-    class Node():
-        def __init__(self, idx):
-            self.idx = idx
-            self.label = idx
-            self.neighbors = []
-            self.last_update = 0
-
-        def update_label(self):
-            neighbor_labels = np.asarray([n.label for n in self.neighbors])
-
-            # Random tiebreaking argmax
-            new_label = np.random.choice(np.flatnonzero(neighbor_labels == neighbor_labels.max()))
-            self.label = new_label
-
-        def check_satisfied(self):
-            neighbor_labels = np.asarray([n.label for n in self.neighbors])
-            max_labels = np.flatnonzero(neighbor_labels == neighbor_labels.max())
-            if self.label in max_labels:
-                return True
-            else:
-                return False
-            
-
-
     def __init__(self, n_clusters, adjacency_matrix, iterations=10):
         self.adjacency = adjacency_matrix
         self.nodes = self.construct_nodes(self.adjacency)
@@ -488,7 +488,7 @@ class LabelPropagation(object):
         N = adjacency_matrix.shape[0]
         nodes = []
         for i in tqdm.tqdm(range(N)):
-            node = self.Node(i)
+            node = Node(i)
             nodes.append(node)
 
         # Then, define their neighbors
