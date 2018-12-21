@@ -128,7 +128,9 @@ if __name__ == '__main__':
     if args.num_clusters < 1 and not(args.non_competitive or args.competitive or args.load_all):
         raise ValueError('You need to define the number of clusters!')
 
-    assert(len(graph_files) == len(Ks))
+    #assert(len(graph_files) == len(Ks))
+    if len(Ks) == 1 and len(graph_files) > 1:
+        Ks = Ks*len(graph_files)
 
     for graph_file, k in zip(graph_files, Ks):
 
