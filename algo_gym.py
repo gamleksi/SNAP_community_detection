@@ -160,6 +160,8 @@ if __name__ == '__main__':
         if len(algo_pairs) < 1:
             raise ValueError('No algorithms introduced!')
 
+        print(algo_pairs)
+
         best_loss = np.inf
         best_labels = []
 
