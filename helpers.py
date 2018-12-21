@@ -475,12 +475,13 @@ class Node():
             return False
 
 class LabelPropagation(object):
-    def __init__(self, n_clusters, adjacency_matrix, iterations=10):
+    def __init__(self, n_clusters, adjacency_matrix, iterations=10, stop_at_optimal=False):
         self.adjacency = adjacency_matrix
         self.nodes = self.construct_nodes(self.adjacency)
         self.N = self.adjacency.shape[0]
         self.iterations = iterations
         self.n_clusters = n_clusters
+        self.stop_at_optimal = stop_at_optimal
 
     
     def construct_nodes(self, adjacency_matrix):
@@ -505,24 +506,27 @@ class LabelPropagation(object):
         uniques = np.unique(found_labels, return_counts=True)
         num_communities = len(uniques[0])
 
-        while num_communities > self.n_clusters:
-            # Combine smallest clusters until n_clusters achieved
-            smallest_cluster_idxs = np.argsort(uniques[1])
-            smallest = smallest_cluster_idxs[0]
-            second_smallest = smallest_cluster_idxs[1]
+        if not self.stop_at_optimal:
+            while num_communities > self.n_clusters:
+                # Combine smallest clusters until n_clusters achieved
+                smallest_cluster_idxs = np.argsort(uniques[1])
+                smallest = smallest_cluster_idxs[0]
+                second_smallest = smallest_cluster_idxs[1]
 
-            smallest_label = uniques[0][smallest]
-            second_smallest_label = uniques[0][second_smallest]
+                smallest_label = uniques[0][smallest]
+                second_smallest_label = uniques[0][second_smallest]
 
-            smallest_community_members = np.where(found_labels == smallest_label)
-            for member in smallest_community_members[0]:
-                self.nodes[member].label = second_smallest_label
+                smallest_community_members = np.where(found_labels == smallest_label)
+                for member in smallest_community_members[0]:
+                    self.nodes[member].label = second_smallest_label
 
-            found_labels = np.asarray([n.label for n in self.nodes])
-            uniques = np.unique(found_labels, return_counts=True)
-            num_communities = len(uniques[0])
+                found_labels = np.asarray([n.label for n in self.nodes])
+                uniques = np.unique(found_labels, return_counts=True)
+                num_communities = len(uniques[0])
 
-
+        else:
+            print("Stopping at optimal k = {}".format(num_communities))
+            
         labels = []
         for i in range(self.N):
             assert(i == self.nodes[i].idx)

@@ -61,6 +61,9 @@ def parse_arguments():
     parser.add_argument('--fast', dest='run_fast', action='store_true', help='Runs a Fast modularity')
     parser.set_defaults(run_fast=False)
 
+    parser.add_argument('--stop-optimal', dest='stop_optimal', action='store_true', help='Stops algorithms at optimal clustering rather than enforcing k')
+    parser.set_defaults(stop_optimal=False)
+
     parser.add_argument('--deep', dest='run_deep', action='store_true', help='Runs a Deep Walk')
     parser.set_defaults(run_deep=False)
 
@@ -68,7 +71,10 @@ def parse_arguments():
     parser.set_defaults(run_labelprop=False)
 
 
-    parser.add_argument('--num-clusters', default=-1, type=int, help='Check the correspondance for the graph. Pairs are commented in algo_gym.py')
+    parser.add_argument('--num-clusters', default=-1, dest='num_clusters', type=int, help='Check the correspondance for the graph. Pairs are commented in algo_gym.py')
+
+    parser.add_argument('--one-k', dest='one_k', action='store_true', help='Only run on the k specified in num_clusters')
+    parser.set_defaults(run_labelprop=False)
 
     parser.add_argument('--load-graph', default='ca-GrQc.txt', type=str, help='graph file')
 
@@ -106,15 +112,18 @@ if __name__ == '__main__':
 
     if args.load_all:
         graph_files = non_competitive_files + competitive_files
-        Ks = non_competitive_Ks + competitive_Ks
+        if not args.one_k:
+            Ks = non_competitive_Ks + competitive_Ks
 
     if args.non_competitive:
         graph_files = non_competitive_files
-        Ks = non_competitive_Ks
+        if not args.one_k:
+            Ks = non_competitive_Ks
 
     if args.competitive:
         graph_files = competitive_files
-        Ks = competitive_Ks
+        if not args.one_k:
+            Ks = competitive_Ks
 
     if args.num_clusters < 1 and not(args.non_competitive or args.competitive or args.load_all):
         raise ValueError('You need to define the number of clusters!')
@@ -144,7 +153,7 @@ if __name__ == '__main__':
                 algo_pairs.append(((helpers.BalancedKMeans(k, n_init=30, graph_data=graph_data), 'Balanced Kmeans'), (embedding, 'embedding')))
 
         if (args.run_fast):
-            algo_pairs.append(((helpers.FastModularity(k, adjacency_matrix), 'Fast Modularity'), (None, "Nothing for fast modularity")))
+            algo_pairs.append(((helpers.FastModularity(k, adjacency_matrix, stop_at_optimal=args.stop_optimal), 'Fast Modularity'), (None, "Nothing for fast modularity")))
 
         if args.run_deep:
             savefile = graph_file[:-4] + '.embedding'
@@ -154,7 +163,7 @@ if __name__ == '__main__':
         if args.run_labelprop:
             import sys
             sys.setrecursionlimit(100000)
-            algo_pairs.append(((helpers.LabelPropagation(k, adjacency_matrix), 'Labelpropagation'), (None, "Nothing for labelprop")))
+            algo_pairs.append(((helpers.LabelPropagation(k, adjacency_matrix, stop_at_optimal=args.stop_optimal), 'Labelpropagation'), (None, "Nothing for labelprop")))
 
 
         print("Starting clustering...")
